@@ -8,3 +8,5 @@
 [curve13 (visualcore.com/webgl/curve13/)](https://aeryli.github.io/visualcore.com/webgl/curve13/)
 ## html5synth
 [html5synth (visualcore.com/html5synth/)](https://aeryli.github.io/visualcore.com/html5synth/)
+## Web VR
+[visualcore (visualcore.com/tyrovr/)](https://aeryli.github.io/visualcore.com/tyrovr/)
