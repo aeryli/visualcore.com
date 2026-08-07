@@ -14,15 +14,10 @@ window.addEventListener("load", function() {
 
 window.addEventListener("keypress", function(e) {
     if (e.charCode == 'f'.charCodeAt(0)) {
-        if (renderCanvas.mozRequestFullScreen) {
-            renderCanvas.mozRequestFullScreen({
+        if (renderCanvas.RequestFullScreen) {
+            renderCanvas.RequestFullScreen({
                 vrDisplay: vrHMD
             });
-        } else if (renderCanvas.webkitRequestFullscreen) {
-            renderCanvas.webkitRequestFullscreen({
-                vrDisplay: vrHMD,
-            });
-        }
     }
 }, false);
 
