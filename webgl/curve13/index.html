@@ -1,0 +1,170 @@
+<html>
+    <head>
+        <!-- External libs -->
+        <script src="js/extern/three.min.js"></script>
+        <script src="js/extern/stats.min.js"></script>
+        <script src="js/extern/dat.gui.min.js"></script>
+        <script src="js/extern/shaders/ConvolutionShader.js"></script>
+        <script src="js/extern/shaders/CopyShader.js"></script>
+        <script src="js/extern/shaders/FilmShader.js"></script>
+        <script src="js/extern/shaders/FXAAShader.js"></script>
+        <script src="js/extern/shaders/HorizontalTiltShiftShader.js"></script>
+        <script src="js/extern/shaders/VerticalTiltShiftShader.js"></script>
+        <script src="js/extern/shaders/VignetteShader.js"></script>
+        <script src="js/extern/shaders/RGBShiftShader.js"></script>
+        <script src="js/extern/postprocessing/EffectComposer.js"></script>
+        <script src="js/extern/postprocessing/FilmPass.js"></script>
+        <script src="js/extern/postprocessing/MaskPass.js"></script>
+        <script src="js/extern/postprocessing/RenderPass.js"></script>
+        <script src="js/extern/postprocessing/ShaderPass.js"></script>
+        <script src="js/extern/postprocessing/BloomPass.js"></script>
+        <script src="js/extern/require.js"></script>
+
+        <!-- our stuff -->
+        <script src="js/anim.js"></script>
+        <script src="js/core.js"></script>
+        <script src="js/seq.js"></script>
+        <script src="js/shot.js"></script>
+        <script src="js/geom/ribbon.js"></script>
+        <script src="js/shots/warpSeries.js"></script>
+        <script src="js/shots/warp_1.js"></script>
+        <script src="js/shots/warp_2.js"></script>
+        <script src="js/shots/warp_3.js"></script>
+        <script src="js/shots/warp_4.js"></script>
+        <script src="js/shots/warp_5.js"></script>
+        <script src="js/shots/warp_6.js"></script>
+        <script src="js/shots/warp_7.js"></script>
+        <script src="js/shots/warp_8.js"></script>
+        <script src="js/shots/warp_9.js"></script>
+        <script src="js/shots/circleBlast_1.js"></script>
+        <script src="js/shots/circleSpline_1.js"></script>
+        <script src="js/shots/circleSpline_2.js"></script>
+        <script src="js/shots/circleSpline_3.js"></script>
+        <script src="js/shots/circleSpline_4.js"></script>
+        <script src="js/shots/circleSpline_5.js"></script>
+        <script src="js/shots/circleSpline_6.js"></script>
+        <script src="js/shots/circleSeries.js"></script>
+        <script src="js/shots/chase_1.js"></script>
+        <script src="js/shots/intro.js"></script>
+        <script src="js/shots/outro.js"></script>
+        <script src="js/shots/whistleBreak.js"></script>
+
+        <!-- curve assets -->
+        <script src="curves/arrow.js"></script>
+        <script src="curves/babe.js"></script>
+        <script src="curves/flame.js"></script>
+        <script src="curves/heart.js"></script>
+        <script src="curves/star.js"></script>
+        <style>
+        a:visited, a:link, a, div, span, pre { color: #aa0000; }
+        </style>
+    </head>
+    <body style="margin: 0; padding:0; background-color: black;">
+        <script>
+
+            function toggleFullScreen() {
+                if ((document.fullScreenElement && document.fullScreenElement !== null) ||    
+                   (!document.mozFullScreen && !document.webkitIsFullScreen)) {
+                if (document.documentElement.requestFullScreen) {  
+                  document.documentElement.requestFullScreen();  
+                } else if (document.documentElement.mozRequestFullScreen) {  
+                  document.documentElement.mozRequestFullScreen();  
+                } else if (document.documentElement.webkitRequestFullScreen) {  
+                  document.documentElement.webkitRequestFullScreen(Element.ALLOW_KEYBOARD_INPUT);  
+                }  
+              } else {  
+                if (document.cancelFullScreen) {  
+                  document.cancelFullScreen();  
+                } else if (document.mozCancelFullScreen) {  
+                  document.mozCancelFullScreen();  
+                } else if (document.webkitCancelFullScreen) {  
+                  document.webkitCancelFullScreen();  
+                }  
+              }  
+
+
+              setTimeout(tryToPlay, 1000);
+            } 
+
+            //
+            // Main entry point
+            //
+            _audioReady = false;
+            _glReady = false;
+
+            function tryToPlay() {
+                if (!_glReady) {
+                    init();
+                    _glReady = true;
+                }
+                //
+                // If we're not ready to play, continue spinning
+                // 
+                if (!_audioReady || !_glReady) {
+                    setTimeout(tryToPlay, 500);
+                    return;
+                }
+
+                // run the demo, audio playback will kick off 
+                // the animation.
+                seq.play();
+            }
+
+            function beginPlaying() {
+                // Track the actual start time for debugging
+                var now = new Date().getTime();
+                var trackTime = seq.audio.currentTime*1000;
+                seq.audio._startTime =  now - trackTime;
+
+                // Audio started, now start the animation
+                animate();
+                log("animate");
+            }
+
+            //window.onload = function() {
+            //    tryToPlay();
+            //};
+
+            document.onkeyup = function(e) {
+                var ESC = 27,
+                    K_LEFT = 37,
+                    K_RIGHT = 39;
+
+                if (e.keyCode == ESC) { 
+                    if (seq.isPlaying()) {
+                                         } else {
+                        
+                    }
+                }  else {
+                    console.log("Time: " + seq.getTime() + "s" + 
+                                ", key pressed: " + e.keyCode);
+                }
+            }
+
+        </script>
+        <div id="foo" style="font-family: helvetica, sans-serif; font-size:
+            .9em; width:50%; margin: 0 auto; margin-top: 20%;text-align: center;">
+            <a style="color:#cc0000; font-family: sans; font-size: 10px; text-decoration: none;"
+                onclick='document.getElementById("foo").style.display="none"; toggleFullScreen()' href="#"><pre>
+                                    __          
+  ____ ___  ___ ____   ____  __ ___/  |_  ____  
+_/ __ \\  \/  // __ \_/ ___\|  |  \   __\/ __ \ 
+\  ___/ >    <\  ___/\  \___|  |  /|  | \  ___/ 
+ \___  >__/\_ \\___  >\___  >____/ |__|  \___  >
+     \/      \/    \/     \/                 \/
+</pre>
+            </a><br/>
+            <span style="color:#ccc; font-weight: bold;">Curve 13</span>
+            <span style="font-family: helvetica, sans-serif; font-size:
+                .9em; text-align: center;">by Andrew Butts and Jeremy Cowles</span><br/><br/>
+            <span style="color:#aa; font-size: .9em">Created for 2013 Pixar demo party</span><br/>
+            <span style="color:#aa; font-size: .9em"><a style="color:#aa" href="https://github.com/jcowles/demo-curve13">Source available</a> on GitHub</span>
+        </div>
+        <audio id="soundtrack" 
+                src="music/audio.ogg" 
+		type="audio/ogg"
+                style="display: none" 
+                oncanplay="_audioReady = true;"
+                onplaying="beginPlaying();"></audio>
+    </body>
+</html>
