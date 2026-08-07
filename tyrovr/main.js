@@ -1,7 +1,7 @@
 var camera, scene, mesh;
 var renderCanvas, renderer, vrrenderer;
 var vrHMD, vrHMDSensor;
-
+ 
 window.addEventListener("load", function() {
     if (navigator.getVRDevices) {
         navigator.getVRDevices().then(vrDeviceCallback);
