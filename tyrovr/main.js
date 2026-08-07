@@ -1,5 +1,3 @@
-"use strict";
-
 var camera, scene, mesh;
 var renderCanvas, renderer, vrrenderer;
 var vrHMD, vrHMDSensor;
@@ -10,7 +8,7 @@ window.addEventListener("load", function() {
     } else if (navigator.mozGetVRDevices) {
         navigator.mozGetVRDevices(vrDeviceCallback);
     }
-}, false);
+});
 
 window.addEventListener("keypress", function(e) {
     if (e.charCode == 'f'.charCodeAt(0)) {
@@ -19,7 +17,7 @@ window.addEventListener("keypress", function(e) {
                 vrDisplay: vrHMD
             });
     }
-}, false);
+});
 
 function vrDeviceCallback(vrdevs) {
     for (var i = 0; i < vrdevs.length; ++i) {
