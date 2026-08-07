@@ -1,0 +1,598 @@
+<html> 
+    <head> 
+        <title>Cubic Dub</title> 
+        <meta http-equiv="content-type" content="text/html; charset=ISO-8859-1"> 
+        
+        <link rel="stylesheet" type="text/css" href="css/main.css" />
+
+        <script type="text/javascript" src="lib/glMatrix-0.9.5.min.js"></script> 
+        <script type="text/javascript" src="lib/webgl-utils.js"></script> 
+        <script type="text/javascript" src="lib/webgl-debug.js"></script> 
+
+        <script type="text/javascript" src="core/lab.js"></script> 
+        <script type="text/javascript" src="core/trace.js"></script> 
+        <script type="text/javascript" src="gl/geom.js"></script> 
+        <script type="text/javascript" src="gl/grid.js"></script> 
+        <script type="text/javascript" src="gl/texture.js"></script> 
+        <script type="text/javascript" src="gl/fbo.js"></script> 
+        <script type="text/javascript" src="gl/shader.js"></script> 
+        <script type="text/javascript" src="gl/classic-noise.js"></script> 
+        <script type="text/javascript" src="gl/pingpong.js"></script> 
+        <script type="text/javascript" src="gl/field.js"></script> 
+        <script type="text/javascript" src="gl/bloom.js"></script> 
+        <script type="text/javascript" src="gl/particles.js"></script> 
+        <script type="text/javascript" src="gl/curves.js"></script> 
+
+        <script type="text/javascript" src="anim.js"></script> 
+        <script type="text/javascript" src="main.js"></script> 
+
+        <!-- DISPLACEMENT SHADERS -->
+        <script id="displace-fs" type="x-shader/x-fragment"> 
+            #ifdef GL_ES
+            precision highp float;
+            #endif
+         
+            //uniform int doTex;
+            uniform float time;
+            uniform sampler2D tex0;
+
+            varying vec4 vColor;
+            varying vec3 vLight;
+            varying vec2 vUv;
+         
+            void main(void) {
+                float f = fract(time/1000.);
+                gl_FragColor = vColor;
+                return;
+            }
+        </script> 
+        <script id="displace-vs" type="x-shader/x-vertex"> 
+            attribute vec3 aVertexPosition;
+            attribute vec4 aVertexColor;
+            attribute vec3 aVertexNormal; 
+            attribute vec2 aVertexUV; 
+            uniform float time;
+            uniform int doWave;
+            uniform sampler2D tex0;
+            uniform float res;
+
+            uniform mat4 uMVMatrix;
+            uniform mat4 uPMatrix;
+            uniform mat3 uNMatrix;
+         
+            varying vec4 vColor;
+            varying vec3 vLight;
+            varying vec2 vUv;
+            varying vec4 pos;
+            
+            void main(void) {
+                gl_Position = vec4(aVertexPosition, 1.0);
+                vec3 transformedNormal = uNMatrix * aVertexNormal;
+                vec3 tCol;
+                float light1 = max(dot(transformedNormal, vec3(0,1,1)), 0.0);
+                float light = light1;
+                vUv = aVertexUV;
+                vLight = vec3(0.2,0.2,0.2) + vec3(.5,.5,.5)*light;
+                vColor = vec4(0.1,0.1,0.1,0.) + vec4(vec3(aVertexColor)*light, aVertexColor.a);
+
+                vec2 p = (aVertexUV- .5)*2.0;
+                float a = atan(p.y, p.x);
+                float r = sqrt(dot(p, p));
+                vec2 uv = aVertexUV;
+                float depth;
+                vec4 toff;
+
+                if (doWave > 0) {
+                    uv.x = .75*(time/1000.)+0.999/r;
+                    uv.y = .5*sin(.0+p.y*(time/2000.)); a/3.1416;
+
+                    // wrap u/v
+                    uv.x = fract(abs(uv.x));
+                    uv.y = fract(abs(uv.y));
+                    toff = texture2D(tex0, uv);
+                    float s = .3*(1.+sin(time/3000.));
+                    s = clamp(r-.4,0.,1.);
+                    depth = ((s)*toff.z*(.2+r)) + 
+                            (1.-s)*texture2D(tex0, floor(aVertexUV*res)/res).z;
+                } else {
+                    toff = texture2D(tex0,floor(uv*res)/res);
+                    depth = toff.z;
+                }
+
+                if (depth <= 10.) {
+                    vColor = vec4((vColor*0.25).xyz,1.);
+                }
+                
+                if (depth <= 8.) {
+                    float PI = 3.1416;
+                    depth += sin(sin(time/4000.*35.*PI + p.x*20.*p.y));
+                    if (mod(sin(gl_Position.x)+sin(gl_Position.y), 5.) < 4.) {
+                        vColor = vec4(vColor.xyz*(1.+max(0., min(depth, 5.91)/5.)),1.);
+                    }
+                }
+                gl_Position.xy += toff.xy; 
+                gl_Position.z += depth;
+                gl_Position = uPMatrix * uMVMatrix * gl_Position; 
+            }
+        </script> 
+
+        <!-- DEPTH MAPPING SHADER -->
+        <script id="depth-fs" type="x-shader/x-fragment"> 
+            #ifdef GL_ES
+            precision highp float;
+            #endif
+         
+            varying vec4 vposition;
+         
+            void main() {
+                vec4 color;
+                vec3 q = vposition.xyz;
+                color = vec4(0.,0.,q.z,1.);
+                gl_FragColor = color;
+            }
+        </script> 
+        <script id="depth-vs" type="x-shader/x-vertex"> 
+
+            attribute vec3 aVertexPosition;
+
+            uniform mat4 uPMatrix;
+            uniform mat4 uMVMatrix;
+            uniform mat3 uNMatrix;
+            uniform float time;
+            
+            varying vec4 vposition;
+
+            void main() {
+                vposition = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
+                gl_Position = vposition;
+            }
+        </script> 
+
+        <!-- FIELD SHADER -->
+        <script id="field-fs" type="x-shader/x-fragment"> 
+            #ifdef GL_ES
+            precision highp float;
+            #endif
+
+            varying vec2 pos;
+            uniform float time;
+            uniform float dt;
+            uniform int init;
+            uniform sampler2D tex0;
+            uniform int debug;
+
+            #define MAX 2
+            #define MIN -1
+            void main() {
+                vec2 uv = .5+.5*pos ;
+                if (debug==1) {
+                    gl_FragColor = texture2D(tex0, uv);
+                } else {
+                    gl_FragColor = .995*texture2D(tex0, uv);
+                    gl_FragColor += vec4(0.,0.,min(gl_FragColor.z,.01),0.);
+                    //return;
+                    int i = -1; int j = -1;
+                    float factor = .0005;
+                    gl_FragColor +=  (factor)*texture2D(tex0, uv + vec2( float(i)/100., float(j)/100. ));
+                    j++;
+                    gl_FragColor +=  (factor)*texture2D(tex0, uv + vec2( float(i)/100., float(j)/100. ));
+                    j++;
+                    gl_FragColor +=  (factor)*texture2D(tex0, uv + vec2( float(i)/100., float(j)/100. ));
+
+                    i++;
+                    j=-1;
+                    gl_FragColor +=  (factor)*texture2D(tex0, uv + vec2( float(i)/100., float(j)/100. ));
+                    j++;
+                    gl_FragColor +=  (factor)*texture2D(tex0, uv + vec2( float(i)/100., float(j)/100. ));
+                    j++;
+                    gl_FragColor +=  (factor)*texture2D(tex0, uv + vec2( float(i)/100., float(j)/100. ));
+
+                    i++;
+                    j=-1;
+                    gl_FragColor +=  (factor)*texture2D(tex0, uv + vec2( float(i)/100., float(j)/100. ));
+                    j++;
+                    gl_FragColor +=  (factor)*texture2D(tex0, uv + vec2( float(i)/100., float(j)/100. ));
+                    j++;
+                    gl_FragColor +=  (factor)*texture2D(tex0, uv + vec2( float(i)/100., float(j)/100. ));
+                    return;
+                    gl_FragColor =  .2*texture2D(tex0, uv + vec2( .001,0.));
+                    gl_FragColor += .2*texture2D(tex0, uv + vec2(-.001,0.));
+                    gl_FragColor += .2*texture2D(tex0, uv + vec2(0.,.001));
+                    gl_FragColor += .2*texture2D(tex0, uv + vec2(0.,-.001));
+                    gl_FragColor += .2*texture2D(tex0, uv);
+                    return;
+                    float PI = 3.1415;
+                    float s = .7*cos(time/1000.+pos.x*PI);
+                    if (s < pos.y+.1 && s > pos.y-.3)
+                        gl_FragColor = vec4(0.,0.,0.,11.);
+                    else
+                        gl_FragColor = vec4(0.,.0,0.,0.);
+                }
+            }
+        </script> 
+        <script id="field-vs" type="x-shader/x-vertex"> 
+            attribute vec2 vertex;
+
+            varying vec2 pos;
+
+            void main() {
+                pos = vertex;
+                gl_Position = vec4(vertex.x,vertex.y,0.,1.);
+            }
+        </script> 
+
+        <!-- BLT SHADER -->
+        <script id="blt-fs" type="x-shader/x-fragment"> 
+            #ifdef GL_ES
+            precision highp float;
+            #endif
+         
+            varying vec2 uv;
+            uniform sampler2D tex0;
+            uniform sampler2D tex1;
+            uniform sampler2D tex2;
+            uniform sampler2D tex3;
+            uniform float cutoff;
+            uniform int texCount;
+            uniform int doVignette;
+            uniform float invert;
+            uniform vec2 colorSep;
+
+            vec4 highpass(vec4 clr) {
+                if (cutoff == 0.0) return clr;
+                clr.x = clr.x > cutoff ? clr.x : 0.0;
+                clr.y = clr.y > cutoff ? clr.y : 0.0;
+                clr.z = clr.z > cutoff ? clr.z : 0.0;
+                if (clr.x > cutoff || clr.y > cutoff || clr.z > cutoff) {
+                    return vec4(.3,.3,1.0,1.0);
+                }
+                return clr;
+            }
+         
+            // component separation
+            vec4 sep(sampler2D tex) {
+                if (colorSep.x == 0. && colorSep.y == 0.)
+                    return texture2D(tex, uv);
+
+                vec4 g = texture2D(tex, uv+colorSep);
+                vec4 r = texture2D(tex, uv+-1.*colorSep);
+                vec4 b = texture2D(tex, uv+vec2(colorSep.y*-1., colorSep.x));
+
+                return vec4(r.x,g.y,b.z, 1.0);
+            }
+
+            vec4 vignette(vec4 color) {
+                if (doVignette != 0) {
+                    float d = abs(length(uv - .5));
+                    if (d > 0.0)
+                        color = vec4(vec3(clamp(1.-(d),0.,1.)*color), 1.0);
+                }
+                
+                return color;
+            }
+
+            void main() {
+                gl_FragColor = highpass(sep(tex0));
+
+                if (texCount > 1) 
+                    gl_FragColor += sep(tex1);
+
+                if (texCount > 2) 
+                    gl_FragColor += sep(tex2);
+
+                if (texCount > 3) 
+                    gl_FragColor += 2.*sep(tex3);
+                
+                gl_FragColor = vignette(gl_FragColor);
+            }
+        </script> 
+        <script id="blt-vs" type="x-shader/x-vertex"> 
+            attribute vec2 vertex;
+            varying vec2 uv;
+            uniform float stretchFactor;
+            void main() {
+                uv = vec2((vertex.x+1.) / 2., (vertex.y+1.) / 2.);
+                gl_Position = vec4(vertex.x,vertex.y,0.,1.);
+            }
+        </script> 
+
+        <!-- RAW COPY SHADER -->
+        <script id="copy-fs" type="x-shader/x-fragment"> 
+            #ifdef GL_ES
+            precision highp float;
+            #endif
+         
+            varying vec2 uv;
+            uniform sampler2D tex0;
+            void main() {
+                gl_FragColor = texture2D(tex0, uv);
+            }
+        </script> 
+        <script id="copy-vs" type="x-shader/x-vertex"> 
+            attribute vec2 vertex;
+            varying vec2 uv;
+            void main() {
+                uv = vec2((vertex.x+1.) / 2., (vertex.y+1.) / 2.);
+                gl_Position = vec4(vertex.x,vertex.y,0.,1.);
+            }
+        </script> 
+
+        <!-- BLUR SHADER -->
+        <script id="blur-fs" type="x-shader/x-fragment"> 
+            #ifdef GL_ES
+            precision highp float;
+            #endif
+         
+            varying vec2 uv;
+            uniform sampler2D tex0;
+
+            uniform float coefficients[3];
+            uniform float offsetx;
+            uniform float offsety;
+            uniform int huge;
+
+            void main(void)
+            {
+                vec4 c;
+                vec2 offset = vec2(offsetx, offsety);
+
+                c  = coefficients[0] * texture2D(tex0, uv - offset);
+                c += coefficients[1] * texture2D(tex0, uv);
+                c += coefficients[2] * texture2D(tex0, uv + offset);
+
+                if (huge > 0) {
+                    float coef = coefficients[0] * .2;
+                    for (float i = 2.; i < 10.; i+=1.) {
+                        c += coef * texture2D(tex0, uv + i*offset);
+                        c += coef * texture2D(tex0, uv - i*offset);
+                        coef *= .99;
+                    }
+                    for (float i = 10.; i < 80.; i+=5.) {
+                        c += coef * texture2D(tex0, fract(uv + i*offset));
+                        c += coef * texture2D(tex0, fract(uv - i*offset));
+                        coef *= .99;
+                    }
+                }
+
+                gl_FragColor = c;
+            } 
+        </script> 
+         
+        <script id="blur-vs" type="x-shader/x-vertex"> 
+            attribute vec2 vertex;
+            varying vec2 uv;
+            void main() {
+                uv = vec2((vertex.x+1.) / 2., (vertex.y+1.) / 2.);
+                gl_Position = vec4(vertex.x,vertex.y,0.,1.);
+            }
+        </script> 
+
+        <!-- LENS SCHMUTZ SHADER -->
+        <script id="schmutz-fs" type="x-shader/x-fragment"> 
+            #ifdef GL_ES
+            precision highp float;
+            #endif
+         
+            varying vec2 uv;
+            uniform sampler2D tex0;
+
+            int ellipse(vec2 uv, vec2 pos, vec2 rad) {
+                vec2 dp = uv - pos;
+                return (dp.x*dp.x)/(rad.x*rad.x) 
+                     + (dp.y*dp.y)/(rad.y*rad.y) <= 1. ? 1 : 0;
+            }
+
+            vec4 schmutz(vec2 uv) {
+                vec4 c = vec4(0.,0.,0.,0.);
+
+                // test each schmutz spot
+                vec2 spot1 = vec2(0.5, 0.5);
+                if (1 == ellipse(uv, vec2(0.1, 0.1), vec2(.015,.02)))
+                    return vec4(1.,1.,1.,.1);
+
+
+                return c;
+            }
+
+            void main(void)
+            {
+                vec4 c = vec4(0.,0.,0.,0.); //texture2D(tex0, uv);
+
+                vec4 s = schmutz(uv);
+
+                gl_FragColor = c+s;
+            } 
+        </script> 
+         
+        <script id="schmutz-vs" type="x-shader/x-vertex"> 
+            attribute vec2 vertex;
+            varying vec2 uv;
+            void main() {
+                uv = vec2((vertex.x+1.) / 2., (vertex.y+1.) / 2.);
+                gl_Position = vec4(vertex.x,vertex.y,0.,1.);
+            }
+        </script> 
+
+        <!-- PARTICLE UPDATE SHADER -->
+        <script id="particle-fs" type="x-shader/x-fragment"> 
+            #ifdef GL_ES
+            precision highp float;
+            #endif
+         
+            #define POS 0
+            #define VEL 1
+
+            varying vec2 uv;
+            uniform int mode;
+            uniform int init;
+            uniform int debug;
+            uniform int doAttract;
+            uniform float time;
+            uniform float dt;
+            uniform sampler2D tex0;
+            uniform sampler2D tex1;
+            uniform sampler2D tex2;
+            uniform sampler2D tex3;
+
+            void main(void)
+            {
+                vec4 c;
+                vec4 old = texture2D(tex0, uv);
+
+                if (mode == POS) {
+                    vec4 vel = texture2D(tex1, uv);
+                    //c = clamp(old + vec4(vec3(vel*dt), 1.0), 0.0, 1.0);
+                    c = old + vec4(vec3(vel*dt), 1.0);
+                } else if (mode == VEL) {
+                    vec4 accel = texture2D(tex1, vec2(uv.x, uv.y));
+                    //vec4 accel = texture2D(tex1, vec2(fract(pos.x), fract(pos.y)));
+                    vec4 pos = texture2D(tex2, uv);
+                    vec4 attr = texture2D(tex3, uv);
+
+                    float drag = 1. - dt*1.333;
+
+                    if (doAttract > 0) { //time/1000. > 16.) {
+                        old.xyz = old.xyz*drag + 9.*(attr.xyz - pos.xyz)*dt;
+                    } else {
+                        old.x = old.x*drag + accel.x*dt;
+                        old.y = old.y*drag + accel.y*dt;
+                    }
+
+                    c = old;
+                } else {
+                    c = vec4(0.,1.,1.,1.);
+                }
+
+                gl_FragColor = c;
+            } 
+        </script> 
+         
+        <script id="particle-vs" type="x-shader/x-vertex"> 
+            attribute vec2 vertex;
+            varying vec2 uv;
+            void main() {
+                uv = vec2((vertex.x+1.) / 2., (vertex.y+1.) / 2.);
+                gl_Position = vec4(vertex.x,vertex.y,0.,1.);
+            }
+        </script> 
+
+        <!-- DISTORTION SHADER -->
+        <!-- FILM GRAIN SHADER -->
+        <script id="grain-fs" type="x-shader/x-fragment"> 
+            #ifdef GL_ES
+            precision highp float;
+            #endif
+         
+            varying vec2 uv;
+            uniform sampler2D tex0;
+            uniform float time;
+            void main() {
+                vec2 uvs = uv + vec2(sin(time), sin(sin(time)));
+                uvs.x = fract(uvs.x);
+                uvs.y = fract(uvs.y);
+                gl_FragColor = vec4(1.0, 1.0, 1.0, texture2D(tex0, uvs).a);
+                //gl_FragColor = mix(gl_FragColor, vec4(gl_FragColor.xyz, gl_FragColor.a+.1), mod(gl_FragCoord.y, 2.));
+            }
+        </script> 
+         
+        <script id="grain-vs" type="x-shader/x-vertex"> 
+            attribute vec2 vertex;
+            varying vec2 uv;
+            void main() {
+                uv = vec2((vertex.x+1.) / 2., (vertex.y+1.) / 2.);
+                gl_Position = vec4(vertex.x,vertex.y,0.,1.);
+            }
+        </script> 
+
+        <!-- CURVE DRAWING SHADER -->
+        <script id="curveDraw-fs" type="x-shader/x-fragment"> 
+            #ifdef GL_ES
+            precision highp float;
+            #endif
+         
+            varying vec2 uv;
+            uniform sampler2D tex0;
+            uniform float time;
+
+            vec4 testCurve(vec4 cv, vec4 cd) {
+                if (!(uv.x > cv.x && uv.x < cv.z &&
+                    uv.y > cv.y - cd.w && uv.y < cv.w + cd.w)) {
+                    return vec4(0.,0.,0.,0.);
+                }
+
+                float PI = 3.1416;
+                float t = (uv.x - cv.x) / (cv.z - cv.x);
+                float s = 2.* (.5 - (uv.y - (cv.y - cd.w)) / (2.*cd.w));
+                float c = .85*sin((cd.x + time/200. + t * 2. * PI ));
+                if (time == 0.)
+                    return vec4(1.,1.,0.,0.);
+                float h = 1. + 1.8*smoothstep(0., 1., max(0., t - .95) / 0.05);
+                float hc =  max(0.,  t-.975) / .025;
+                hc = 1. - (hc*hc*hc);
+                c = max(0., hc*h*t * .8 * cd.w - abs(s - c))*10.;
+
+                if (c == 0.) 
+                    return vec4(0.);
+
+                return vec4(0., 0., sin(t*2.*PI) + c*2.+20., 0.);
+            }
+
+            #define count 1.
+            vec4 getColor(vec2 p) {
+                vec4 c = vec4(0.,0.,0.,1.);
+                for (float i = 0.; i < count; i++) {
+                    c += testCurve( texture2D(tex0, vec2(i/(count-1.), 0.)),
+                                    texture2D(tex0, vec2(i/(count-1.), 1.))  );
+                }
+                return c;
+            }
+
+            void main() {
+                gl_FragColor = getColor(uv);;
+            }
+        </script> 
+         
+        <script id="curveDraw-vs" type="x-shader/x-vertex"> 
+            attribute vec2 vertex;
+            varying vec2 uv;
+            void main() {
+                uv = vec2((vertex.x+1.) / 2., (vertex.y+1.) / 2.);
+                gl_Position = vec4(vertex.x,vertex.y,0.,1.);
+            }
+        </script> 
+        <!-- 
+          *********************************************************
+            END SHADERS 
+          *********************************************************
+        -->
+    </head> 
+    <body onload="setTimeout(start, 1000);"> 
+        <div style="display:table; width: 100%; height: 100%; #position: relative; overflow: hidden;">
+            <div style="text-align: center; #position: absolute; #right: 50%; #top: 50%; display: table-cell; vertical-align:middle;">
+                <div id="loadingArea">
+                    <div id="loading">loading...</div>
+                    <div id="videoMessage">(also available on
+                    youtube here: <a target=_blank href="http://www.youtube.com/watch?v=Lo2zUMTnWF0">Cubic Dub</a>)</div>
+                </div>
+                <canvas id="canvas" width="1024" height="428"></canvas> 
+                <canvas id="textCanvas" width="150" height="150"></canvas>  
+                <div id="fps"><label id="fpsLabel"></label></div>
+                <div id="time"><label id="timeLabel"></label></div>
+            </div>
+        </div>
+        <div style="display:none">
+            Tx: <input id="x" value="-75" type=text></input>
+            Ty: <input id="y" value="30" type=text></input>
+            Tz: <input id="z" value="-80" type=text></input> <br>
+            Rx: <input id="rx" value="-60" type=text></input>
+            Ry: <input id="ry" value="0" type=text></input>
+            Rz: <input id="rz" value="0" type=text></input 
+        </div>
+        <audio id="soundtrack" 
+               src="dubstep-5.ogg" 
+               style="display: none" 
+               oncanplay="_audioReady = true;" 
+               onplaying="_soundtrack._startTime = new Date().getTime() - _soundtrack.currentTime*1000; Lab.accum('tick', tick)">
+        </audio>
+    </body>
+</html> 
