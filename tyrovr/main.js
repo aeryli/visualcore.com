@@ -6,16 +6,16 @@ function runeggy() {
     renderCanvas = document.getElementById("render-canvas");
 
     if ('xr' in navigator) {
-    navigator.xr.isSessionSupported('immersive-vr').then((supported) => {
-        if (supported) {
-        // WebXR immersive VR is supported; handle setup or show entry button
-        vrDeviceCallback();
-        } else {
-        console.log("Immersive VR not supported");
-        }
-    });
+        navigator.xr.isSessionSupported('immersive-vr').then((supported) => {
+            if (supported) {
+            // WebXR immersive VR is supported; handle setup or show entry button
+            vrDeviceCallback();
+            } else {
+                console.log("Immersive VR not supported");
+            }
+        });
     } else {
-    console.log("WebXR not available");
+        console.log("WebXR not available");
     }
 
     window.addEventListener("keypress", function(e) {
@@ -23,7 +23,10 @@ function runeggy() {
             renderCanvas.requestFullscreen();
             console.log(e.code);
         }
-        
+    });
+    document.getElementById("start").addEventListener("click", function(e) {
+        renderCanvas.requestFullscreen();
+        console.log(e.code);
     });
 
     function vrDeviceCallback(vrdevs) {
