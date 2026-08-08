@@ -1,78 +1,77 @@
-function runeggy() {
-    var camera, scene, mesh;
-    var renderCanvas, renderer, vrrenderer;
-    var vrHMD, vrHMDSensor;
+"use strict";
 
-    renderCanvas = document.getElementById("render-canvas");
+var camera, scene, mesh;
+var renderCanvas, renderer;
+var xrSession = null;
+var xrRefSpace = null;
 
-    if ('xr' in navigator) {
-        navigator.xr.isSessionSupported('immersive-vr').then((supported) => {
+window.addEventListener("load", function() {
+    if (navigator.xr) {
+        navigator.xr.isSessionSupported('immersive-vr').then(function(supported) {
             if (supported) {
-            // WebXR immersive VR is supported; handle setup or show entry button
-            vrDeviceCallback();
-            } else {
-                console.log("Immersive VR not supported");
+                initScene();
+                initRenderer();
+                
+                document.getElementById("start").addEventListener("click", function(e) {
+                    if (e.charCode == 'f'.charCodeAt(0) && !xrSession) {
+                        navigator.xr.requestSession('immersive-vr').then(onXRSessionStarted);
+                    }
+                }, false);
             }
         });
+    }
+}, false);
+
+function onXRSessionStarted(session) {
+    xrSession = session;
+    // Bind WebGL context to the WebXR session
+    xrSession.updateRenderState({
+        baseLayer: new XRWebGLLayer(xrSession, renderer.getContext())
+    });
+
+    xrSession.requestReferenceSpace('local').then(function(refSpace) {
+        xrRefSpace = refSpace;
+        // WebXR sessions drive animation via their own requestAnimationFrame
+        xrSession.requestAnimationFrame(render);
+    });
+}
+
+function initScene() {
+    camera = new THREE.PerspectiveCamera(60, 1280 / 800, 0.001, 10);
+    camera.position.z = 2;
+    scene = new THREE.Scene();
+    var geometry = new THREE.IcosahedronGeometry(1, 1);
+    var material = new THREE.MeshNormalMaterial();
+    mesh = new THREE.Mesh(geometry, material);
+    scene.add(mesh);
+}
+
+function initRenderer() {
+    renderCanvas = document.getElementById("render-canvas");
+    renderer = new THREE.WebGLRenderer({
+        canvas: renderCanvas,
+    });
+    renderer.setClearColor(0x555555);
+    renderer.setSize(1280, 800, false);
+}
+
+function render(time, frame) {
+    if (xrSession) {
+        xrSession.requestAnimationFrame(render);
+
+        // Retrieve pose relative to the reference space instead of vrHMDSensor.getState()
+        if (frame) {
+            var pose = frame.getViewerPose(xrRefSpace);
+            if (pose) {
+                var view = pose.views[0];
+                var orientation = view.transform.orientation;
+                camera.quaternion.set(orientation.x, orientation.y, orientation.z, orientation.w);
+            }
+        }
     } else {
-        console.log("WebXR not available");
-    }
-
-    window.addEventListener("keypress", function(e) {
-        if (e.code == 'KeyF') {
-            renderCanvas.requestFullscreen();
-            console.log(e.code);
-        }
-    });
-    document.getElementById("start").addEventListener("click", function(e) {
-        renderCanvas.requestFullscreen();
-        console.log(e.code);
-    });
-
-    function vrDeviceCallback(vrdevs) {
-        for (var i = 0; i < vrdevs.length; ++i) {
-            if (vrdevs[i] instanceof HMDVRDevice) {
-                vrHMD = vrdevs[i];
-                break;
-            }
-        }
-        for (var i = 0; i < vrdevs.length; ++i) {
-            if (vrdevs[i] instanceof PositionSensorVRDevice &&
-                vrdevs[i].hardwareUnitId == vrHMD.hardwareUnitId) {
-                vrHMDSensor = vrdevs[i];
-                break;
-            }
-        }
-        initScene();
-        initRenderer();
-        render();
-    }
-
-    function initScene() {
-        camera = new THREE.PerspectiveCamera(60, 1280 / 800, 0.001, 10);
-        camera.position.z = 2;
-        scene = new THREE.Scene();
-        var geometry = new THREE.IcosahedronGeometry(1, 1);
-        var material = new THREE.MeshNormalMaterial();
-        mesh = new THREE.Mesh(geometry, material);
-        scene.add(mesh);
-    }
-
-    function initRenderer() {
-        renderCanvas = document.getElementById("render-canvas");
-        renderer = new THREE.WebGLRenderer({
-            canvas: renderCanvas,
-        });
-        renderer.setClearColor(0x555555);
-        renderer.setSize(1280, 800, false);
-        vrrenderer = new THREE.VRRenderer(renderer, vrHMD);
-    }
-
-    function render() {
         requestAnimationFrame(render);
-        mesh.rotation.y += 0.01;
-        var state = vrHMDSensor.getState();
-        camera.quaternion.set(state.orientation.x, state.orientation.y, state.orientation.z, state.orientation.w);
-        vrrenderer.render(scene, camera);
     }
+
+    mesh.rotation.y += 0.01;
+    renderer.render(scene, camera);
 }
